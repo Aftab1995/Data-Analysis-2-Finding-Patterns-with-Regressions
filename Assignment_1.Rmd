@@ -1,0 +1,46 @@
+---
+title: "DA2 Assignment 1"
+author: "Aftab Alam & Talha Zahid"
+date: "11/21/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+# Loading the data
+
+rm(list = ls())
+
+library(dplyr)
+library(tidyverse)
+library(fixest)
+library(lspline)
+library(modelsummary)
+
+data <- read_csv("https://osf.io/4ay9x/download")
+
+```
+
+### Unconditional wage gap between males and females in the *Financial Managers* occupation in the U.S. as per Bureau of Labor Statistics for the year 2014
+```{r, echo=FALSE}
+#  Using the occupational code 0120 - Financial Managers
+
+df <- data %>% filter(occ2012 == 0120)
+
+# Creating the wage/hour (w/h) variable for comparison across different observations
+
+df <- mutate(df, wagehour = earnwke/uhours)
+df <- mutate(df, female=as.numeric(sex==2))
+
+datasummary(as.factor(female)*wagehour ~ Mean + SD + Min + Max + P25 + P75 + N , data = df)
+
+# The unconditional wage gap between men and women: men on average tend to earn around $10 more than women in the 
+# Financial Manager jobs. With men earning the highest wage per hour of ~$115 per hour and women earning the highest of
+# ~$80 per hour.
+
+```
+
+
