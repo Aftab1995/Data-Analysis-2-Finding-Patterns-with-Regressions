@@ -1,15 +1,14 @@
 ---
-title: "DA2 Assignment 1"
-author: "Aftab Alam & Talha Zahid"
-date: "11/21/2021"
-output: html_document
+output: 
+  pdf_document:
+    extra_dependencies: ["float"]
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r, include=FALSE}
+```{r, include=FALSE, message=FALSE, warning=FALSE}
 # Loading the data
 
 rm(list = ls())
@@ -17,30 +16,167 @@ rm(list = ls())
 library(dplyr)
 library(tidyverse)
 library(fixest)
-library(lspline)
 library(modelsummary)
+#install.packages("huxtable")
+library(huxtable)
 
 data <- read_csv("https://osf.io/4ay9x/download")
 
 ```
+### DA2 - Assignment 1
+## Aftab Alam & Muhammad Talha Zahid
 
-### Unconditional wage gap between males and females in the *Financial Managers* occupation in the U.S. as per Bureau of Labor Statistics for the year 2014
-```{r, echo=FALSE}
+### Introduction
+This assignment has tried to find the gender gap between men and women in the *Financial Managers* occupation in the U.S. for 2014 based on the data set taken from the **[OSF]("https://osf.io/4ay9x/")** website.
+
+### Data Changes
+Before conducting any analysis on the data set, it has been filtered to suit our analysis. The focus is the occupation of Financial Managers who earn a weekly wage of more than 0 and have worked for more than 20 hours per week. We have also restricted the age between 17 and 64 years.
+
+To be able to make an apples to apples comparison, we have calculated the wage per hour variable using the weekly age and number of hours worked. Moreover, a dummy variable (female) has been created for gender with a value of 1 for female.
+
+Education levels of high school and higher have been taken from the data set, details available in the appendix of this document. In total, the education levels have been clubbed into 5 dummy variables for the purpose of parametric regressions with associate degrees and lower clubbed into 1 out of the total 5. However, for non-parametric regressions, the total 8 education levels have been used separately for a detailed representation.
+
+### Analysis
+We first created a quick data summary for wage per hour and female variable to get the unconditional gender gap. As per the image 1 in appendix, on average females earned USD9.2 per hour less than their male counterparts in the Financial Managers occupation. This is also visible from regression 1 shown in the image 6 of the appendix.
+
+We checked to see whether we should use the absolute values of wage per hour or log of wage per hour by creating density curves for both variables. Since, the absolute values of wage per hour showed a near normal distribution compared to its log distribution, we chose to use this variable for our regression analysis.
+
+We have run 4 level-level regressions in total, accounting for heteroskedastic errors; regression table in appendix. Regression 1 gives us the unconditional gender gap; on average females earned around USD9.2 less than their male counterparts in the occupation where this coefficient is significant with more than 99.9% confidence. Whereas, when conditioned on education, regression 2 shows that females earned USD6.3 less than their male counterparts with the coefficient being significant at more than 99.9% confidence level. The rest of the education coefficients show that wage is higher for higher levels of education.
+
+To gain a deeper understanding, we ran the last two regressions with interaction terms, the only difference between 3rd and 4th regression is that the 4th regression data does not include the 1 extreme value of USD120 per hour for ed_MA. This change does not largely impact the model apart from changing the ed_MA*female coefficient value and its significance. However, these regressions reveal that even for women with higher education levels, there exists a gender gap with a confidence level of 90%.
+
+In terms of generalizing these results, we would exercise caution as the coefficients of interaction terms are significant only at 90% with large standard errors. Especially for ed_Profess and ed_PhD where the number of observations in the data set for the occupation are very limited. Moreover, since the non-parametric LOWESS regressions showed a non-linear relation between education and wage per hour (graphs in appendix), we could perhaps use a spline regression with interaction terms to get a better fit while having a parametric regression equation, however, that is beyond the analysis of this assignment. 
+
+## Appendix
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
 #  Using the occupational code 0120 - Financial Managers
 
-df <- data %>% filter(occ2012 == 0120)
+df <- data %>% filter(occ2012 == 0120 & uhours>=20 & earnwke>0 & age >= 17 & age<=64)
 
-# Creating the wage/hour (w/h) variable for comparison across different observations
+df <- df %>% filter(grade92 <= 46 & grade92 >= 39)
+
+# Creating the wage/hour (wagehour) variable for comparison across different observations
 
 df <- mutate(df, wagehour = earnwke/uhours)
 df <- mutate(df, female=as.numeric(sex==2))
 
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+# creating the log of wage per hour variable
+
+df <- df %>% mutate(logw = log ( wagehour ))
+
 datasummary(as.factor(female)*wagehour ~ Mean + SD + Min + Max + P25 + P75 + N , data = df)
 
-# The unconditional wage gap between men and women: men on average tend to earn around $10 more than women in the 
-# Financial Manager jobs. With men earning the highest wage per hour of ~$115 per hour and women earning the highest of
+# The unconditional wage gap between men and women: men on average tend to earn around $9 more than women in the 
+# Financial Manager jobs. This is also demonstrated by the simple linear regression of wage per hour on female binary variable. With men earning the highest wage per hour of ~$115 per hour and women earning the highest of
 # ~$80 per hour.
 
 ```
+
+```{r,echo=FALSE, include=FALSE, fig.width= 3, fig.height= 3 }
+
+# Whether to use the wage/hour absolute value or log of wage per hour?
+
+# plotting the distribution of wage per hour and log of wage per hour to see if we should run regression with which one.
+
+ggplot(data = df, aes(x=wagehour))+
+  geom_density()+
+  xlab("log (wage/hour)")
+
+ggplot(data = df, aes(x=logw))+
+  geom_density()+
+  xlab("log (wage/hour)")
+
+# looking at the distribution of both, it makes more sense to use the absolute value of wage per hour instead of log of wage per hour. Since the distribution of wage per hour is closer to a normal distribution compared to log of wage per hour.
+
+```
+
+## Assigning degree names to grade92 variable based on the information provided on page 25 of the **[cpsx](https://osf.io/uqe8z/)** document provided.
+  - ed_AD_less contains the individuals with education levels of associate degrees, some college with no degree, high school, diploma or GED.
+  - ed_BA contains the individuals with education levels of a Bachelor's degree (e.g.BA,AB,BS)
+  - ed_MA contains the individuals with education levels of a Master's or an equivalent degree (e.g.MA,MS,MEng,Med,MSW,MBA)
+  - ed_Profess contains the individuals with education of a professional degree (e.g.MD,DDS,DVM,LLB,JD)
+  - ed_PhD contains the individuals with education levels of a Doctorate degree (e.g.PhD,EdD)
+
+### Additional degree names used for non-parametric regressions that have been clubbed into ed_AD_less above
+  - ed_HS_D High school graduate, diploma or GED 
+  - ed_C_ND Some college but no degree 
+  - ed_AD_VP Associate degree -- occupational/vocational
+  - ed_AD_AP Associate degree -- academic program
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+# Assigning values to grade92 based on the information pr
+
+df <- df %>% mutate(ed_AD_less=as.numeric(grade92<=42 & grade92 >= 39),
+                      ed_BA=as.numeric(grade92==43),
+                      ed_MA=as.numeric(grade92==44),
+                      ed_Profess = as.numeric(grade92==45),
+                      ed_PhD = as.numeric(grade92==46))
+
+```
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, fig.width=7, fig.height=3}
+
+# Running a non-parametric regression of wagehour on education levels
+
+
+ggplot(data = df, aes(x = grade92, y = wagehour )) +
+  geom_smooth( color = "red", method = "loess", formula = " y ~ x") +
+  geom_point()+
+  labs(title = "Non-parametric regression - wage per hour ~ education")+
+  scale_x_continuous( expand=c(0.1, 0.1),  breaks=seq(38, 46,   by=1), 
+                      labels = c("ed_HS","ed_HS_D","ed_C_ND","ed_AD_VP","ed_AD_AP","ed_BA","ed_MA","ed_profess","ed_phd"))
+
+
+# Running a level-level regression between wagehour and female. Since the wage is on an hourly basis, I am not using the log wage/hour here.
+
+
+reg1 <- feols(wagehour ~ female, data = df , vcov="hetero")
+
+# reg1 1 shows that if we have two individuals (1 male and 1 female), the female earns approximately $9.3 less than her male counterpart.
+
+
+# Running a level-level regression between wagehour and female with a moderating variable of education
+
+reg2 <- feols(wagehour ~ female + ed_BA + ed_MA + ed_Profess + ed_PhD, data = df, vcov = "hetero")
+
+
+# reg2 shows that if we have two individuals (1 male and 1 female), the female earns approximately $6.4 less than her male counter, while controlling for the education levels.
+
+# Running a level-level regression between wagehour and female with a moderating variable of education and including interaction terms to control for education levels of both genders.
+reg3 <- feols(wagehour ~ female + ed_BA + ed_MA + ed_Profess + ed_PhD + female*ed_BA + female*ed_MA + female*ed_Profess + female*ed_PhD, data = df, vcov="hetero")
+
+
+# reg3 shows that if we have two individuals (1 male and 1 female), while controlling for education, she will earn approximately $3.97 less than her male counter part + the difference as per the interaction term. For example, if both individuals have a professional degree, the female will earn $18.03 less than her male counter part.
+
+# filtering out the extreme value of $120 dollars for grade92 = 44 (MA) to see if it affects the outcome of the regression as the value is about $45 more than the second highest value of around $75. 
+
+df <- df %>% filter(wagehour <= 100)
+
+reg4 <- feols(wagehour ~ female + ed_BA + ed_MA + ed_Profess + ed_PhD + female*ed_BA + female*ed_MA + female*ed_Profess + female*ed_PhD, data = df, vcov="hetero")
+
+ggplot(data = df, aes(x = grade92, y = wagehour )) +
+  geom_smooth( color = "red", method = "loess", formula = " y ~ x") +
+  geom_point()+
+  labs(title = "Non-parametric regression - wage per hour ~ education", caption = "The extreme value of $120 has been dropped from the ed_MA")+
+  scale_x_continuous( expand=c(0.1, 0.1),  breaks=seq(38, 46,   by=1), 
+                      labels = c("ed_HS","ed_HS_D","ed_C_ND","ed_AD_VP","ed_AD_AP","ed_BA","ed_MA","ed_profess","ed_phd"))
+
+
+```
+
+```{r,echo=FALSE, message=FALSE, warning=FALSE}
+
+huxreg("reg1, y = wage/hour" = reg1, "reg2, y = wage/hour" =reg2, "reg3, y = wage/hour" =reg3, "reg4, y = wage/hour" = reg4, statistics = c(N="nobs", R2 = "r.squared"),stars = c(`****` = 0.001, `***` = 0.01, `**` = 0.05, `*` = 0.1 ),borders = 0.4, outer_borders = 0.8, number_format = "%.3f", align = ".")
+```
+
 
 
