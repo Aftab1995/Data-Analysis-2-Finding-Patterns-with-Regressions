@@ -1,14 +1,14 @@
 ---
 output: 
   pdf_document:
-    extra_dependencies: ["float"]
+    extra_dependencies: ["flafter"]
 ---
+```{r, echo=FALSE}
+knitr::opts_chunk$set(fig.pos = "!H", out.extra = "")
+```
+
 ## Assignment - 2
 ## Aftab Alam & Talha Zahid
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -23,7 +23,6 @@ library(lspline)
 #install.packages("mfx")
 library(mfx)
 library(reshape2)
-library(kableExtra)
 library(data.table)
 
 ```
@@ -54,7 +53,7 @@ madrid <- data %>%
 unique(madrid$month)
 unique(madrid$weekend)
 
-# Further filtering the dataset on month and weekend.weekday data
+# Further filtering the dataset on month and weekend/weekday data
 
 madrid <- madrid %>% 
   filter(month == 11 , weekend == 0)
@@ -155,7 +154,7 @@ lpm <- feols(highly_rated ~ lspline(stars,c(3,3.5,4))  + lspline(distance, c(1,3
 
 madrid$pred_lpm <- predict(lpm)
 
-#summary(madrid$pred_lpm)
+summary(madrid$pred_lpm)
 
 # Since the max value of predicted values' probability is above 1, which cannot be a case in probabilities, we need to run probit/logit regressions.
 
@@ -173,7 +172,7 @@ logit <- glm(highly_rated ~ lspline(stars,c(3,3.5,4))  + lspline(distance, c(1,3
 # predicted probabilities 
 madrid$pred_logit <- predict.glm(logit, type="response")
 fitted(logit) == data$pred_logit
-#summary(madrid$pred_logit)
+summary(madrid$pred_logit)
 # The predicted values are now between 0 and 1.
 
 logit_marg <- logitmfx(highly_rated ~ lspline(stars,c(3,3.5,4))  + lspline(distance, c(1,3.5,5))  + log( price ), data=madrid, atmean=FALSE)
@@ -188,7 +187,7 @@ logit_marg <- logitmfx(highly_rated ~ lspline(stars,c(3,3.5,4))  + lspline(dista
 probit <- glm(highly_rated ~ lspline(stars,c(3,3.5,4))  + lspline(distance, c(1,3.5,5))  + log( price ), data=madrid, family=binomial(link="probit"))
 # predicted probabilities 
 madrid$pred_probit<- predict.glm(probit, type="response") 
-#summary(madrid$pred_probit)
+summary(madrid$pred_probit)
 # probit marginal differences
 probit_marg <- probitmfx(highly_rated ~ lspline(stars,c(3,3.5,4))  + lspline(distance, c(1,3.5,5))  + log( price ), data=madrid, atmean=F)
 
@@ -208,13 +207,20 @@ varname_report <- c("(Intercept)" = "Intercept",
 
 cm <- c('(Intercept)' = 'Constant')
 
-summarry_reg <- msummary(list(lpm1 , lpm , logit , logit_marg , probit , probit_marg),
+summarry_reg <- msummary(list("lpm" = lpm , "logit" = logit , "logit_marg" = logit_marg , "probit" = probit ,"probit_marg"= probit_marg),
          fmt="%.3f",
          gof_omit = 'DF|Deviance|Log.Lik.|F|R2 Adj.|AIC|BIC|R2|PseudoR2',
-         stars=c('*' = .05, '**' = .01),
-         coef_rename = cm,
-         coef_omit = 'as.factor(country)*',
-         dict = varname_report,
+         stars=c('*' = .05, '**' = .01, '***' = .001),
+         coef_rename = c("(Intercept)" = "Intercept",
+                   "lspline(stars, c(3, 3.5, 4))1" = "stars (<3)",
+                   "lspline(stars, c(3, 3.5, 4))2" = "stars (>=3, <3.5)",
+                   "lspline(stars, c(3, 3.5, 4))3" = "stars (>=3.5, <4)",
+                   "lspline(stars, c(3, 3.5, 4))4" = "stars (>=4)",
+                   "lspline(distance, c(1, 3.5, 5))1" = "distance (<1)",
+                   "lspline(distance, c(1, 3.5, 5))2" = "distance (>=1, <3.5)",
+                   "lspline(distance, c(1, 3.5, 5))3" = "distance (>=3.5, <5)",
+                   "lspline(distance, c(1, 3.5, 5))4" = "distance (>=5)",
+                   "log(price)" = "log(price)")
          
 )
 
@@ -226,7 +232,7 @@ g5 <- ggplot(data = madrid) +
   geom_smooth(aes(x=pred_lpm, y=pred_probit, color="Probit"), size=0.5,  shape=16) +
   geom_smooth(aes(x=pred_lpm, y=pred_logit,  color="Logit"), size=0.5,  shape=16) +
   geom_line(aes(x=pred_lpm, y=pred_lpm,    color="45 Degree line"), size=0.5) +
-  labs(x = "Predicted probability of Highly Rated (LPM)", y="Predicted probability")+
+  labs(title = "Predicted Probabilities", x = "Predicted probability of Highly Rated (LPM)", y="Predicted probability (Logit,Probit) ")+
   scale_y_continuous(expand = c(0.00,0.0), limits = c(0.1,1), breaks = seq(0,1,0.1)) +
   scale_x_continuous(expand = c(0.00,0.0), limits = c(0.25,1), breaks = seq(0,1,0.1)) +
   scale_color_manual(name = "", values=c("#D40C0C", "#03577B","#00C20F")) +
@@ -242,34 +248,40 @@ g5 <- ggplot(data = madrid) +
 
 ## Appenddix
 
+
+Correlation Matrix
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE,  fig.align='center', fig.height=5,fig.width=6, fig.show="hold"}
+cor_matrix
+```
+
 Data summary for interested variables
-```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.pos="center"}
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.align='center', fig.show="hold"}
 ds
 
 ```
 
-
-Correlation Matrix
-```{r, echo=FALSE, warning=FALSE, message=FALSE}
-cor_matrix
-```
-
 Lowess curves for distance and stars against highly_rated
-```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, figures-side, fig.show="hold", out.width="50%"}
 graph_dist
 
 graph_star
 
 ```
 
-Regression tables
-```{r}
-summarry_reg
-```
 
 Predicted values from Logit and Probit against predicted values from lpm
-```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE,  fig.align='center', fig.height= 3 ,fig.width= 5 , fig.show="hold"}
 g5
 
 ```
+
+Regression tables
+```{r, echo=FALSE, warning=FALSE, message=FALSE,  fig.height= 8,fig.width=5, fig.pos="h"}
+summarry_reg
+
+```
+
 
