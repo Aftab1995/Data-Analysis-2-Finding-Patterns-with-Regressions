@@ -1,14 +1,47 @@
 ---
 output: 
-  pdf_document:
-    extra_dependencies: ["flafter"]
+  pdf_document: 
+    extra_dependencies: flafter
+    fig_caption: yes
+    toc_depth: 2
+    highlight: tango
 ---
 ```{r, echo=FALSE}
 knitr::opts_chunk$set(fig.pos = "!H", out.extra = "")
 ```
 
-## Assignment - 2
-## Aftab Alam & Talha Zahid
+## Assignment - 2 - Aftab Alam & Talha Zahid
+### Introduction
+This assignment has tried to find the probability of a hotel being highly rated in Madrid in November 2017 on weekdays based on the data taken from **[OSF-Price]("https://osf.io/p6tyr/")** and **[OSF-Features]("https://osf.io/utwjs/")** website.
+
+### Data
+Firstly, we have created a binary variable where the highly_rated variable, where highly_rated = 1 if rating >= 4, else 0. In order to check correlation between different variables with the highly_rated, we created a correlation heat map. As the variables price, distance, and stars seemed to have high correlation with the ratings, we decided to move forward with these 3 variables. The price variable had a near log-normal distribution, so we decided to take the log of price which gave us a Normal Distribution. In order to see if we are required to use splines, we checked the lowess curves for the 3 variables. For stars we decided to use splines at 3, 3.5, and 4 and for distance we used splines at 1, 3.5, and 5, graphs for these 2 variables are shown in the appendix. 
+
+### Analysis
+We first ran an LPM model where we regressed highly rated distance, stars, and the log price. As mentioned above, we added splines to the distance and stars variables. The coefficients of LPM gave us 4 significant coefficients, stars and log price. However, when we looked at the predicted probabilities of the model, there were values of above 1, which cannot be a case in probabilities.
+
+Hence, we decided to run logit and probit models to limit our predicted models between 0 and 1. As expected, the predicted probabilities were between 0 and 1 for these models, also shown in the graph in the appendix.
+
+Moreover, since the coefficients of these 2 models can be interpreted directly, we then estimated the probit and logit regressions to calculate the corresponding marginal effects. Since these the coefficients from these can be interpreted similar to an LPM model.
+
+In terms of the direction of the coefficients, we are getting the same directions for all variables across models except for the spline where stars for a hotel are less than 3; for this LPM is giving a positive value as opposed to a negative value in the other models. Regardless, this coefficients is not significant across all the models.
+
+Reading the significant coefficients from the LPM, for a hotel rated between 3 and 3.5 stars, the probability of getting a high rating is 26% when the star is higher by 0.5 unit. The same variable in the logit-AME model, this probability is 35%. The variable is not significant under the probit-AME model.
+
+For a hotel with stars between 3.5 and 4, the probability of getting a high rating is -17% when the star is higher by 0.5 unit. The same variable shows a probability of -15% under the logit-AME and probit-AME models. For a hotel with stars 4 and above, the probability of getting a high rating is -15% when when the star is higher by 1 unit. However, the coefficient is not significant in the other models although the direction is same.
+
+The distance variable's coefficients are not significant across the models and and their sign oscillates between negative and positive for the 4 splines, respectively. 
+
+With regards to the log(price) variable, the coefficients are significant at 99.9% across the models. As per the LPM, the probability of a hotel being highly rated is 40% when the price is higher by 1%. The probabilities are similar in the probit-AME and logit-AME are  similar with a probability of 44%.
+
+### Conclusion
+Based on the models we have run, we are confident in establishing that the probability of getting a high rating for hotel is higher for higher prices. This might be because hotels that are priced higher tend to have better services in general, hence receiving a higher rating, however, we need to further refine our models to get a better relationship between price and high rating. With regards to stars, our models show that for hotels with stars less 3.5 tend to have a positive probability of getting high ratings for a hotel with more stars, however, for hotels with more than 4 stars tend to have a negative probability of getting high ratings for a hotel with more stars. A plausible reason could be that for hotels with more stars, higher than 4, the expectations of customers tend to increase and they tend to rate the hotels more critically.
+
+Moreover, our models did not establish any significant relationship between the probability of highly rated and distance of the hotel from the city center, but the signs of the coefficients suggest a hotel near the center has a higher probability of getting a better rating. 
+
+Overall, we would caution before generalizing these results as we believe more research is needed in terms of internal validity and external validity to not just imply a relationship but also for external validity.
+
+
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 
@@ -24,6 +57,7 @@ library(lspline)
 library(mfx)
 library(reshape2)
 library(data.table)
+library(kableExtra)
 
 ```
 
@@ -58,7 +92,7 @@ unique(madrid$weekend)
 madrid <- madrid %>% 
   filter(month == 11 , weekend == 0)
 ####
-summary(madrid$price)
+summary(madrid$price) 
 
 # Checking to see any extreme values in the price variable.
 
@@ -248,18 +282,20 @@ g5 <- ggplot(data = madrid) +
 
 ## Appenddix
 
+Data summary for interested variables
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.align='center', fig.show="hold"}
+ds %>% 
+      kable_styling(latex_options = c("HOLD_position", "striped"),stripe_color = "gray!6" )
+
+```
+
 
 Correlation Matrix
 
-```{r, echo=FALSE, warning=FALSE, message=FALSE,  fig.align='center', fig.height=5,fig.width=6, fig.show="hold"}
+```{r, echo=FALSE, warning=FALSE, message=FALSE,  fig.align='center', fig.height=3.7, fig.show="hold"}
 cor_matrix
 ```
 
-Data summary for interested variables
-```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.align='center', fig.show="hold"}
-ds
-
-```
 
 Lowess curves for distance and stars against highly_rated
 
@@ -273,14 +309,15 @@ graph_star
 
 Predicted values from Logit and Probit against predicted values from lpm
 
-```{r, echo=FALSE, warning=FALSE, message=FALSE,  fig.align='center', fig.height= 3 ,fig.width= 5 , fig.show="hold"}
+```{r, echo=FALSE, warning=FALSE, message=FALSE,  fig.align='center', fig.height= 4 ,fig.width= 6 , fig.show="hold"}
 g5
 
 ```
 
 Regression tables
-```{r, echo=FALSE, warning=FALSE, message=FALSE,  fig.height= 8,fig.width=5, fig.pos="h"}
-summarry_reg
+```{r, echo=FALSE, warning=FALSE, message=FALSE,  fig.pos="h"}
+summarry_reg  %>% 
+      kable_styling(latex_options = c("HOLD_position", "striped","scale_down"),stripe_color = "gray!6" )
 
 ```
 
