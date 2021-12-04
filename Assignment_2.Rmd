@@ -1,0 +1,275 @@
+---
+output: 
+  pdf_document:
+    extra_dependencies: ["float"]
+---
+## Assignment - 2
+## Aftab Alam & Talha Zahid
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+rm(list=ls())
+
+# packages
+library(tidyverse)
+library(modelsummary)
+library(fixest)
+library(ggpubr)
+library(lspline)
+#install.packages("mfx")
+library(mfx)
+library(reshape2)
+library(kableExtra)
+library(data.table)
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+# Loading the data
+
+hotels_europe_price <- read_csv("https://osf.io/p6tyr/download")
+hotels_europe_features <- read_csv("https://osf.io/utwjs/download")
+
+# Join them by hotel_id
+data <- left_join(hotels_europe_price, hotels_europe_features, by = "hotel_id")
+rm(hotels_europe_price,hotels_europe_features)
+
+# Filtering the data and selecting the city - 
+
+unique(data$city_actual)
+unique(data$year)
+
+# Choosing madrid as the city and 2017 as the year
+
+madrid <- data %>% 
+  filter(accommodation_type == "Hotel") %>% 
+  filter( year == 2017) %>% 
+  filter(city_actual == "Madrid") %>% 
+  filter(!is.na(rating))
+####
+unique(madrid$month)
+unique(madrid$weekend)
+
+# Further filtering the dataset on month and weekend.weekday data
+
+madrid <- madrid %>% 
+  filter(month == 11 , weekend == 0)
+####
+summary(madrid$price)
+
+# Checking to see any extreme values in the price variable.
+
+ggplot(data = madrid , aes(x = price)) +
+  geom_point(aes(y = rating))
+
+# Filtering out the extreme value of prices above 500, and NA values for stars and distance
+
+madrid <- madrid %>% 
+  filter(price < 500) %>% 
+  filter(!is.na(stars)) %>% 
+  filter(!is.na(distance))
+  
+madrid <- data.table::data.table(madrid)
+
+```
+
+
+```{r, echo=FALSE}
+
+# Creating the highly_rated variable, where highly_rated = 1 if rating >= 4, else 0
+
+madrid$highly_rated <- ifelse(madrid$rating>=4, 1, 0)
+
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+# Checking correlations of variables with highly_rated
+
+numeric_df <- keep( madrid , is.numeric ) 
+
+cT <- round( cor( numeric_df , use = "complete.obs") , 2 )
+# create a lower triangular matrix
+cT[ upper.tri( cT ) ] <- NA
+# Put it into a tibble format
+melted_cormat <- melt( cT , na.rm = TRUE)
+# Now we can create a heat-map
+ cor_matrix <- ggplot( data = melted_cormat, aes( Var2 , Var1 , fill = value ) )+
+  geom_tile( color = "white" ) +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Correlation") +
+  theme_bw()+ 
+  theme( axis.text.x = element_text(angle = 45, vjust = 1, 
+                                    size = 10, hjust = 1))+
+  labs(y="",x="")+
+  coord_fixed()
+
+cor_matrix
+
+# Based on the correlation matrix, it seems like the variable highly_rated is positively related to price and stars, whereas it is negatively related to 
+# offer, scarce_room, and distance. However, for the purpose of this assignment, we are going forward with the variables price, stars, and distance.
+
+####
+ggplot(data = madrid, aes(x=price))+
+  geom_density()
+
+ggplot(data = madrid, aes(x=log( price )))+
+  geom_density()
+
+# Since the price variable is a little skewed toward the y-axis, we are taking the log price as it gives a near normal distribution
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+# Checking lowess curves for the three dependent variables to decide on using splines or not
+
+graph_dist <- ggplot(data = madrid, aes(x=distance, y=highly_rated))+
+  geom_smooth(formula = y~x, method = "loess")
+
+graph_star <- ggplot(data = madrid, aes(x=stars, y=highly_rated))+
+  geom_smooth(formula = y~x, method = "loess")
+
+graph_price <- ggplot(data = madrid, aes(x=log( price ), y=highly_rated))+
+  geom_smooth(formula = y~x, method = "loess")
+
+P95 <- function(x){ quantile(x,.95,na.rm=T)}
+P5 <- function(x){ quantile(x,.05,na.rm=T)}
+ds <- datasummary( highly_rated + distance + stars + price + log( price ) ~ Mean + SD + Min + Max + Median + P5 + P95 + N , data = madrid )
+ds
+```
+
+
+```{r, echo=FALSE, include=FALSE}
+
+lpm1 <- feols(highly_rated ~ stars + distance + log (price), data=madrid, vcov = "hetero")
+
+lpm <- feols(highly_rated ~ lspline(stars,c(3,3.5,4))  + lspline(distance, c(1,3.5,5)) + log (price), data=madrid, vcov = "hetero")
+
+
+madrid$pred_lpm <- predict(lpm)
+
+#summary(madrid$pred_lpm)
+
+# Since the max value of predicted values' probability is above 1, which cannot be a case in probabilities, we need to run probit/logit regressions.
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+# logit regressions
+
+logit <- glm(highly_rated ~ lspline(stars,c(3,3.5,4))  + lspline(distance, c(1,3.5,5))  + log( price ), data=madrid, family='binomial'(link = "logit"))
+#summary(logit)
+#glance(logit)
+
+
+# predicted probabilities 
+madrid$pred_logit <- predict.glm(logit, type="response")
+fitted(logit) == data$pred_logit
+#summary(madrid$pred_logit)
+# The predicted values are now between 0 and 1.
+
+logit_marg <- logitmfx(highly_rated ~ lspline(stars,c(3,3.5,4))  + lspline(distance, c(1,3.5,5))  + log( price ), data=madrid, atmean=FALSE)
+
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+# probit regression
+
+probit <- glm(highly_rated ~ lspline(stars,c(3,3.5,4))  + lspline(distance, c(1,3.5,5))  + log( price ), data=madrid, family=binomial(link="probit"))
+# predicted probabilities 
+madrid$pred_probit<- predict.glm(probit, type="response") 
+#summary(madrid$pred_probit)
+# probit marginal differences
+probit_marg <- probitmfx(highly_rated ~ lspline(stars,c(3,3.5,4))  + lspline(distance, c(1,3.5,5))  + log( price ), data=madrid, atmean=F)
+
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+
+varname_report <- c("(Intercept)" = "Intercept",
+                   "lspline(stars, c(3, 3.5, 4))1" = "stars (<3)",
+                   "lspline(stars, c(3, 3.5, 4))2" = "stars (>=3, <3.5)",
+                   "lspline(stars, c(3, 3.5, 4))3" = "stars (>=3.5)",
+                   "lspline(distance, c(1, 3.5, 5))1" = "distance (<1)",
+                   "lspline(distance, c(1, 3.5, 5))2" = "distance (>=1, <3.5)",
+                   "lspline(distance, c(1, 3.5, 5))3" = "distance (>=3.5)",
+                   "log(price)" = "log(price)")
+
+cm <- c('(Intercept)' = 'Constant')
+
+summarry_reg <- msummary(list(lpm1 , lpm , logit , logit_marg , probit , probit_marg),
+         fmt="%.3f",
+         gof_omit = 'DF|Deviance|Log.Lik.|F|R2 Adj.|AIC|BIC|R2|PseudoR2',
+         stars=c('*' = .05, '**' = .01),
+         coef_rename = cm,
+         coef_omit = 'as.factor(country)*',
+         dict = varname_report,
+         
+)
+
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, include=FALSE}
+g5 <- ggplot(data = madrid) +
+  geom_smooth(aes(x=pred_lpm, y=pred_probit, color="Probit"), size=0.5,  shape=16) +
+  geom_smooth(aes(x=pred_lpm, y=pred_logit,  color="Logit"), size=0.5,  shape=16) +
+  geom_line(aes(x=pred_lpm, y=pred_lpm,    color="45 Degree line"), size=0.5) +
+  labs(x = "Predicted probability of Highly Rated (LPM)", y="Predicted probability")+
+  scale_y_continuous(expand = c(0.00,0.0), limits = c(0.1,1), breaks = seq(0,1,0.1)) +
+  scale_x_continuous(expand = c(0.00,0.0), limits = c(0.25,1), breaks = seq(0,1,0.1)) +
+  scale_color_manual(name = "", values=c("#D40C0C", "#03577B","#00C20F")) +
+  ggthemes::theme_economist()+
+  theme(
+    legend.position = "top",
+    plot.title = element_text(face = "bold",
+    hjust = 0.5),
+    axis.title.y = element_text(face = "bold", vjust = 4),
+    axis.title.x = element_text(face = "bold", vjust = -2)
+  )
+```
+
+## Appenddix
+
+Data summary for interested variables
+```{r, echo=FALSE, warning=FALSE, message=FALSE, fig.pos="center"}
+ds
+
+```
+
+
+Correlation Matrix
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+cor_matrix
+```
+
+Lowess curves for distance and stars against highly_rated
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+graph_dist
+
+graph_star
+
+```
+
+Regression tables
+```{r}
+summarry_reg
+```
+
+Predicted values from Logit and Probit against predicted values from lpm
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+g5
+
+```
+
